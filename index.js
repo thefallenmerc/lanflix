@@ -3,23 +3,42 @@ const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 const Cryptr = require('cryptr');
+const uuid = require('uuid/v1');
+const session = require('express-session');
 
 
 const app = express();
 
+// set ejs as view engine
 app.set('view engine', 'ejs');
 app.set('views', 'views');
 
+
+// use express  body-parser
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+
+// use .env
 dotenv.config();
 
+
+// init the sesion
+app.use(session({ secret: process.env.APP_KEY, resave: true, saveUninitialized: true }));
+
+// make crypter
 const cryptr = new Cryptr(process.env.APP_KEY);
 
-const seriesList = [];
+const seriesList = {};
 
-const episodeList = [];
+const episodeList = {};
+
+/**
+ * 
+ * @param {string} src
+ * 
+ * Function to get series from source 
+ */
 function getSeries(src) {
     if (!src) {
         return src + ' is not a valid source!';
@@ -42,12 +61,22 @@ function getSeries(src) {
     return series;
 }
 
+/**
+ * 
+ * @param {string} src 
+ * @param {array} series 
+ */
 function addSeriesToList(src = '', series = []) {
     if (seriesList[src] === undefined) {
         seriesList[src] = series
     }
 }
 
+/**
+ * Get dir with file
+ * @param {*} name 
+ * @param {*} abspath 
+ */
 function getDirWithFiles(name, abspath) {
     return {
         type: 'dir',
@@ -57,6 +86,13 @@ function getDirWithFiles(name, abspath) {
     };
 }
 
+
+/**
+ * Get dir with dir
+ * @param {*} name 
+ * @param {*} abspath 
+ * @param {*} getContent 
+ */
 function getDirWithDir(name, abspath, getContent = false) {
     return {
         type: 'dir',
@@ -66,22 +102,36 @@ function getDirWithDir(name, abspath, getContent = false) {
     };
 }
 
+/**
+ *  get only files
+ * @param {*} dirPath 
+ * @param {*} dirContent 
+ */
 function getOnlyFiles(dirPath = '', dirContent = []) {
     return dirContent.filter(e => {
         const ePath = path.join(dirPath, e);
         return fs.lstatSync(ePath).isFile();
     }).map(e => {
         const ePath = path.join(dirPath, e);
-        episodeList.push(ePath);
-        return {
+        // const link = cryptr.encrypt(ePath);
+        const shortLink = uuid(ePath);
+        const episode = {
             name: e,
             path: ePath,
-            link: cryptr.encrypt(ePath),
+            // link,
+            shortLink,
             type: 'file'
-        }
+        };
+        episodeList[shortLink] = episode;
+        return episode;
     });
 }
 
+/**
+ * Get only dirs
+ * @param {*} dirPath 
+ * @param {*} dirContent 
+ */
 function getOnlyDirectories(dirPath = '', dirContent = []) {
     return dirContent.filter(e => {
         const ePath = path.join(dirPath, e);
@@ -89,6 +139,11 @@ function getOnlyDirectories(dirPath = '', dirContent = []) {
     });
 }
 
+/**
+ * Get dir with content
+ * @param {*} dirPath 
+ * @param {*} dirContent 
+ */
 function getDirWithContent(dirPath = '', dirContent = []) {
     return dirContent.filter(e => {
         const ePath = path.join(dirPath, e);
@@ -104,17 +159,30 @@ function getDirWithContent(dirPath = '', dirContent = []) {
     });
 }
 
-
 app.get('/', (req, res) => {
     const src = req.query.src;
     const series = getSeries(src);
-    console.log('-----------------------------------------------------');
-    console.log(episodeList);
-    console.log('-----------------------------------------------------');
+    return res.json({ episodeList, seriesList });
     return res.render('pages/index', {
         src,
         series
     });
 });
+
+app.get('/series', (req, res) => {
+    return res.render('pages/series', { seriesList });
+});
+
+app.post('/series', (req, res) => {
+    const { src } = req.body;
+    if (src) {
+
+    } else {
+        const session = req.session;
+        session.error = 'Source is required!'
+        return res.redirect('/series');
+    }
+    return res.json(req.body);
+})
 
 app.listen(9876);
